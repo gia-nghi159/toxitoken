@@ -1,8 +1,5 @@
 # Toxitoken (LLM Edge Gateway & Developer CLI)
 
-[![Go](https://img.shields.io/badge/go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-
 **Toxitoken** is a dual-component developer tool and edge infrastructure system designed to manage, secure, mock, and stress-test LLM API traffic. It consists of:
 
 1. **The Edge Proxy (`server`)**: A high-performance reverse proxy that sits between applications and model providers (OpenAI, Gemini). It handles credential isolation, zero-buffer SSE stream piping, atomic sliding-window rate limiting, exact-match caching with dual-replay, CI/CD response mocking, and token-aware chaos injection.
