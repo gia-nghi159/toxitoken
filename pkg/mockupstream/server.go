@@ -12,16 +12,16 @@ import (
 	"toxitoken/pkg/models"
 )
 
-// Server is a local zero-cost upstream mock server that simulates OpenAI API behavior.
+// Server provides a local mock upstream server simulating OpenAI API behavior.
 type Server struct {
 	*httptest.Server
 	ChunkDelay     time.Duration
 	RequestCount   int64
-	SimulateError  int // e.g. 401, 429, 500
+	SimulateError  int // Specify HTTP error status code (e.g., 401, 429, 500)
 	CustomResponse string
 }
 
-// NewServer starts and returns a mock upstream server.
+// NewServer initializes and returns a mock upstream server.
 func NewServer() *Server {
 	mock := &Server{
 		ChunkDelay: 10 * time.Millisecond,
@@ -88,13 +88,13 @@ func NewServer() *Server {
 				}
 			}
 
-			// Terminal SSE event
+			// Write terminal SSE event
 			_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 			_ = rc.Flush()
 			return
 		}
 
-		// Non-streaming response
+		// Write non-streaming JSON response
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := models.ChatCompletionResponse{

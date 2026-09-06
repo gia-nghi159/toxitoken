@@ -10,15 +10,15 @@ import (
 	"time"
 )
 
-// Rule defines the parameters for chaos injection.
+// Rule defines parameters for chaos injection.
 type Rule struct {
-	Rate            float64       // Probability (0.0 to 1.0)
-	Delay           time.Duration // Pre-flight latency
-	StatusCode      int           // Artificial HTTP error status code (e.g. 429, 500, 502, 504)
-	DropAfterTokens int           // Sever stream after flushing N *content* tokens (does not count system/wrapper tokens)
+	Rate            float64       // Define probability (0.0 to 1.0).
+	Delay           time.Duration // Define pre-flight latency.
+	StatusCode      int           // Define artificial HTTP error status code (e.g., 429, 500).
+	DropAfterTokens int           // Sever stream after flushing N content tokens.
 }
 
-// ParseConfig parses a chaos configuration header.
+// ParseConfig parses chaos configuration header.
 // Example: "rate=0.4,delay=500ms,status=504,drop_after=10"
 func ParseConfig(header string) (*Rule, error) {
 	header = strings.TrimSpace(header)
@@ -67,7 +67,7 @@ func ParseConfig(header string) (*Rule, error) {
 	return rule, nil
 }
 
-// ShouldApply returns true if a random draw falls under the rule's rate.
+// ShouldApply computes probability draw against rule rate.
 func (r *Rule) ShouldApply() bool {
 	if r == nil || r.Rate <= 0 {
 		return false
@@ -78,7 +78,7 @@ func (r *Rule) ShouldApply() bool {
 	return rand.Float64() < r.Rate
 }
 
-// ApplyPreFlight executes any configured latency delay and returns true if a synthetic error was written.
+// ApplyPreFlight executes configured latency delay and writes synthetic errors.
 func (r *Rule) ApplyPreFlight(w http.ResponseWriter) bool {
 	if r == nil {
 		return false

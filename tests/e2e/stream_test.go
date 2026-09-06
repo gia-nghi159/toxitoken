@@ -132,18 +132,18 @@ func setupTestGateway(mockUpstreamURL string) (*httptest.Server, cache.CacheStor
 }
 
 func TestE2EFullGatewayLifecycle(t *testing.T) {
-	// 1. Start zero-cost mock upstream
+	// Initialize zero-cost mock upstream.
 	mockUpstream := mockupstream.NewServer()
 	mockUpstream.ChunkDelay = 2 * time.Millisecond
 	defer mockUpstream.Close()
 
-	// 2. Start Gateway
+	// Initialize API Gateway.
 	gateway, cacheStore, _ := setupTestGateway(mockUpstream.URL)
 	defer gateway.Close()
 
 	client := &http.Client{}
 
-	// Test Case A: Health check (unauthenticated)
+	// Test Case A: Execute unauthenticated health check.
 	t.Run("HealthCheck", func(t *testing.T) {
 		resp, err := client.Get(gateway.URL + "/health")
 		if err != nil || resp.StatusCode != http.StatusOK {
@@ -151,7 +151,7 @@ func TestE2EFullGatewayLifecycle(t *testing.T) {
 		}
 	})
 
-	// Test Case B: Auth verification (missing token -> 401)
+	// Test Case B: Verify authentication enforcement (missing token -> 401).
 	t.Run("AuthEnforcement", func(t *testing.T) {
 		req, _ := http.NewRequest("POST", gateway.URL+"/v1/chat/completions", strings.NewReader(`{}`))
 		resp, err := client.Do(req)
@@ -217,10 +217,10 @@ func TestE2EFullGatewayLifecycle(t *testing.T) {
 			t.Fatalf("unexpected content accumulated: %s", accumulated.String())
 		}
 
-		// Wait briefly for asynchronous cache save
+		// Await asynchronous cache save.
 		time.Sleep(50 * time.Millisecond)
 
-		// Verify stored in cache
+		// Verify cache persistence.
 		fingerprint := reqPayload.Fingerprint()
 		cached, hit, _ := cacheStore.Get(context.Background(), fingerprint)
 		if !hit || cached == "" {
@@ -228,7 +228,7 @@ func TestE2EFullGatewayLifecycle(t *testing.T) {
 		}
 	})
 
-	// Test Case D: Exact-Match Cache Hit (Dual-Replay SSE)
+	// Test Case D: Verify exact-match cache hit (Dual-Replay SSE).
 	t.Run("CacheHitSSE", func(t *testing.T) {
 		req, _ := http.NewRequest("POST", gateway.URL+"/v1/chat/completions", bytes.NewReader(bodyBytes))
 		req.Header.Set("Authorization", "Bearer test-secret")
@@ -245,7 +245,7 @@ func TestE2EFullGatewayLifecycle(t *testing.T) {
 		}
 	})
 
-	// Test Case E: Exact-Match Cache Hit (Dual-Replay JSON for stream: false)
+	// Test Case E: Verify exact-match cache hit (Dual-Replay JSON).
 	t.Run("CacheHitJSON", func(t *testing.T) {
 		nonStreamReq := reqPayload
 		nonStreamReq.Stream = false
@@ -274,7 +274,7 @@ func TestE2EFullGatewayLifecycle(t *testing.T) {
 		}
 	})
 
-	// Test Case F: CI Mock Mode (Bypasses Upstream)
+	// Test Case F: Verify CI Mock Mode bypasses upstream.
 	t.Run("CIMockMode", func(t *testing.T) {
 		beforeCount := mockUpstream.RequestCount
 
@@ -304,7 +304,7 @@ func TestE2EFullGatewayLifecycle(t *testing.T) {
 		}
 	})
 
-	// Test Case G: Chaos Fault Injection (Synthetic 504)
+	// Test Case G: Verify Chaos fault injection (Synthetic 504).
 	t.Run("ChaosFaultInjection", func(t *testing.T) {
 		req, _ := http.NewRequest("POST", gateway.URL+"/v1/chat/completions", bytes.NewReader(bodyBytes))
 		req.Header.Set("Authorization", "Bearer test-secret")
@@ -322,7 +322,7 @@ func TestE2EFullGatewayLifecycle(t *testing.T) {
 		}
 	})
 
-	// Test Case H: Chaos Mid-Stream Socket Severing
+	// Test Case H: Verify Chaos mid-stream socket severing.
 	t.Run("ChaosMidStreamSevering", func(t *testing.T) {
 		newReqPayload := models.ChatCompletionRequest{
 			Model: "gpt-4o-mini",
@@ -340,7 +340,7 @@ func TestE2EFullGatewayLifecycle(t *testing.T) {
 
 		resp, err := client.Do(req)
 		if err != nil {
-			// Early socket drop can return error or severed stream
+			// Handle early socket drop returning connection error or severed stream.
 			return
 		}
 		defer resp.Body.Close()

@@ -36,13 +36,13 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// Auth & Credential Isolation Middleware
+	// Initialize authentication middleware.
 	authMiddleware := auth.NewMiddleware(cfg.MasterSecret, nil)
 	r.Use(authMiddleware.Handler)
 
 	const rateLimitWindow int64 = 60 // seconds
 
-	// Cache Store & Rate Limiter (Redis or In-Memory fallback)
+	// Initialize cache store and rate limiter dependencies.
 	var cacheStore cache.CacheStore
 	var limiter ratelimit.Limiter
 
@@ -55,7 +55,7 @@ func main() {
 		} else {
 			log.Println("Connected to Redis cache store & rate limiter.")
 			cacheStore = rc
-			// Share the same Redis connection pool for both cache and rate limiting
+			// Assign shared Redis connection pool.
 			limiter = ratelimit.NewRedisLimiter(rc.Client(), 60, rateLimitWindow)
 		}
 	} else {

@@ -101,8 +101,6 @@ func ForwardGeminiStream(
 	}
 	defer resp.Body.Close()
 
-
-
 	if resp.StatusCode != http.StatusOK {
 		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 		w.WriteHeader(resp.StatusCode)

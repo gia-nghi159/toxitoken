@@ -33,7 +33,7 @@ func TestFingerprintDeterminism(t *testing.T) {
 		t.Fatalf("expected identical fingerprints, got %s vs %s", fp1, fp2)
 	}
 
-	// Changing temperature must change fingerprint
+	// Verify temperature change alters fingerprint.
 	temp3 := 0.8
 	req3 := req1
 	req3.Temperature = &temp3
@@ -41,11 +41,11 @@ func TestFingerprintDeterminism(t *testing.T) {
 		t.Fatalf("expected different fingerprint for different temperature")
 	}
 
-	// Changing content must change fingerprint
+	// Verify content change alters fingerprint.
 	req4 := req1
 	req4.Messages = []Message{
 		{Role: "system", Content: "You are a helpful assistant."},
-		{Role: "user", Content: "Hello world!"}, // added exclamation mark
+		{Role: "user", Content: "Hello world!"}, // Exclamation mark alters string content.
 	}
 	if req4.Fingerprint() == fp1 {
 		t.Fatalf("expected different fingerprint for different content")
