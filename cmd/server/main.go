@@ -99,7 +99,8 @@ func main() {
 			return
 		}
 
-		fingerprint := req.Fingerprint()
+		activeToken, _ := r.Context().Value(auth.ActiveTokenKey).(string)
+		fingerprint := req.Fingerprint(activeToken)
 		w.Header().Set("X-Fingerprint", fingerprint)
 
 		// 1. CI Mock Mode Engine (X-Proxy-Mode: mock)
@@ -148,13 +149,19 @@ func main() {
 				return
 			}
 
+			// Resolve the Gemini Key (Sponsored vs BYOK)
+			geminiKey := cfg.GeminiKey
+			if activeToken != "" && activeToken != cfg.MasterSecret {
+				geminiKey = activeToken
+			}
+
 			if req.Stream {
-				_ = adapter.ForwardGeminiStream(r.Context(), w, geminiReq, req.Model, cfg.GeminiKey, "")
+				_ = adapter.ForwardGeminiStream(r.Context(), w, geminiReq, req.Model, geminiKey, "")
 				return
 			}
 
 			// Non-streaming Gemini: call generateContent, write OpenAI-compatible JSON, and cache the result
-			if candidateText, err := adapter.ForwardGeminiSync(r.Context(), w, geminiReq, req.Model, cfg.GeminiKey, ""); err == nil && candidateText != "" {
+			if candidateText, err := adapter.ForwardGeminiSync(r.Context(), w, geminiReq, req.Model, geminiKey, ""); err == nil && candidateText != "" {
 				_ = cacheStore.Set(r.Context(), fingerprint, candidateText, 24*time.Hour)
 			}
 			return
@@ -162,6 +169,15 @@ func main() {
 
 		// 5. Standard OpenAI Upstream Forwarding (Cache Miss)
 		w.Header().Set("X-Cache", "MISS")
+		
+		// If it's not a BYOK token, reject it because we don't sponsor OpenAI anymore
+		if activeToken == cfg.MasterSecret || activeToken == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusPaymentRequired)
+			_, _ = w.Write([]byte(`{"error":{"message":"OpenAI requires a Bring Your Own Key (BYOK). Please provide your OpenAI API key in the token flag.","code":402}}`))
+			return
+		}
+
 		upstreamReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, cfg.UpstreamURL, bytes.NewReader(bodyBytes))
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
@@ -171,9 +187,7 @@ func main() {
 		}
 
 		upstreamReq.Header.Set("Content-Type", "application/json")
-		if cfg.OpenAIKey != "" {
-			upstreamReq.Header.Set("Authorization", "Bearer "+cfg.OpenAIKey)
-		}
+		upstreamReq.Header.Set("Authorization", "Bearer "+activeToken)
 
 		client := &http.Client{Timeout: 0}
 		resp, err := client.Do(upstreamReq)

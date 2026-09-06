@@ -11,8 +11,11 @@ import (
 // that normalizes model casing, float precision, and uses length-prefixing
 // to eliminate delimiter-collision vulnerabilities.
 // Note: Length-prefixing secures the semicolon delimiter against injection attacks.
-func (r *ChatCompletionRequest) Fingerprint() string {
+func (r *ChatCompletionRequest) Fingerprint(activeToken string) string {
 	h := sha256.New()
+
+	// Partition by active API token to isolate BYOK caches.
+	fmt.Fprintf(h, "token:%s:", activeToken)
 
 	// Normalize model identifier.
 	h.Write([]byte(strings.ToLower(strings.TrimSpace(r.Model))))

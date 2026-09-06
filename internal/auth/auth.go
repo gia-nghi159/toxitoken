@@ -1,10 +1,15 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 )
+
+type contextKey string
+
+const ActiveTokenKey contextKey = "active_token"
 
 // Middleware enforces Bearer token authentication and isolates credentials.
 type Middleware struct {
@@ -55,21 +60,11 @@ func (m *Middleware) Handler(next http.Handler) http.Handler {
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 		token = strings.TrimSpace(token)
 
-		// Check token validity if authentication is enabled
-		if len(m.ValidTokens) > 0 && !m.ValidTokens[token] {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error": map[string]any{
-					"message": "Invalid API token",
-					"type":    "authentication_error",
-					"code":    401,
-				},
-			})
-			return
-		}
+		// Inject the provided token into the context for downstream BYOK usage.
+		ctx := context.WithValue(r.Context(), ActiveTokenKey, token)
+		r = r.WithContext(ctx)
 
-		// Credential isolation: Strip client authorization header so upstream sees only provider secret
+		// Credential isolation: Strip client authorization header so upstream sees only provider secret or explicit BYOK
 		r.Header.Del("Authorization")
 
 		next.ServeHTTP(w, r)

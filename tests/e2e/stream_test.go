@@ -58,7 +58,8 @@ func setupTestGateway(mockUpstreamURL string) (*httptest.Server, cache.CacheStor
 			return
 		}
 
-		fingerprint := req.Fingerprint()
+		activeToken, _ := r.Context().Value(auth.ActiveTokenKey).(string)
+		fingerprint := req.Fingerprint(activeToken)
 		w.Header().Set("X-Fingerprint", fingerprint)
 
 		// 1. Mock Mode
@@ -221,7 +222,7 @@ func TestE2EFullGatewayLifecycle(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 
 		// Verify cache persistence.
-		fingerprint := reqPayload.Fingerprint()
+		fingerprint := reqPayload.Fingerprint("test-secret")
 		cached, hit, _ := cacheStore.Get(context.Background(), fingerprint)
 		if !hit || cached == "" {
 			t.Fatalf("expected response to be persisted in cache after stream finished")

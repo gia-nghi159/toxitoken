@@ -7,7 +7,6 @@ import (
 type Config struct {
 	Port         string
 	UpstreamURL  string
-	OpenAIKey    string
 	GeminiKey    string
 	RedisURL     string
 	DefaultMode  string
@@ -18,7 +17,6 @@ func Load() *Config {
 	return &Config{
 		Port:         getEnv("PORT", "8080"),
 		UpstreamURL:  getEnv("UPSTREAM_URL", "https://api.openai.com/v1/chat/completions"),
-		OpenAIKey:    os.Getenv("OPENAI_API_KEY"),
 		GeminiKey:    os.Getenv("GEMINI_API_KEY"),
 		RedisURL:     os.Getenv("REDIS_URL"), // Empty fallback triggers in-memory mode
 		DefaultMode:  getEnv("DEFAULT_MODE", "live"),
