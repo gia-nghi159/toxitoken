@@ -22,7 +22,7 @@ func Load() *Config {
 		GeminiKey:    os.Getenv("GEMINI_API_KEY"),
 		RedisURL:     os.Getenv("REDIS_URL"), // Empty fallback triggers in-memory mode
 		DefaultMode:  getEnv("DEFAULT_MODE", "live"),
-		MasterSecret: getEnv("TOXI_MASTER_KEY", "dev-secret-token"),
+		MasterSecret: getEnv("MASTER_SECRET", "dev-secret-token"),
 	}
 }
 
