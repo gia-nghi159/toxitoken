@@ -121,8 +121,8 @@ Toxitoken includes a multi-stage `Dockerfile` that compiles to an unprivileged d
 
 **Option 1: Use the Pre-built Public Image (Recommended)**
 ```bash
-docker pull ghcr.io/gia-nghi159/toxitoken:main
-docker run -p 8080:8080 ghcr.io/gia-nghi159/toxitoken:main
+docker pull ghcr.io/gia-nghi159/toxitoken:latest
+docker run -p 8080:8080 ghcr.io/gia-nghi159/toxitoken:latest
 ```
 
 **Option 2: Build from Source**
