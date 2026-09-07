@@ -125,15 +125,8 @@ func (r *RedisStore) SaveCompletion(ctx context.Context, key string, text string
 	return r.Set(ctx, key, text, 24*time.Hour)
 }
 
-// DualReplayer handles serving cached content either as a single JSON response or simulated SSE chunks.
-type DualReplayer struct{}
-
-func NewDualReplayer() *DualReplayer {
-	return &DualReplayer{}
-}
-
 // ReplayJSON returns an instant OpenAI ChatCompletionResponse with X-Cache: HIT.
-func (d *DualReplayer) ReplayJSON(w http.ResponseWriter, model, cachedText string) error {
+func ReplayJSON(w http.ResponseWriter, model, cachedText string) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Cache", "HIT")
 	// Compute response payload
@@ -161,7 +154,7 @@ func (d *DualReplayer) ReplayJSON(w http.ResponseWriter, model, cachedText strin
 }
 
 // ReplaySSE emits synthetic 2-to-4 word fragments with 10ms pacing to emulate streaming.
-func (d *DualReplayer) ReplaySSE(ctx context.Context, w http.ResponseWriter, model, cachedText string, chunkDelay time.Duration) error {
+func ReplaySSE(ctx context.Context, w http.ResponseWriter, model, cachedText string, chunkDelay time.Duration) error {
 	rc := http.NewResponseController(w)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")

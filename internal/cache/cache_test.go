@@ -34,10 +34,9 @@ func TestMemoryStore(t *testing.T) {
 }
 
 func TestDualReplayJSON(t *testing.T) {
-	replayer := NewDualReplayer()
 	rec := httptest.NewRecorder()
 
-	err := replayer.ReplayJSON(rec, "gpt-4o-mini", "Hello world from cache")
+	err := ReplayJSON(rec, "gpt-4o-mini", "Hello world from cache")
 	if err != nil {
 		t.Fatalf("ReplayJSON failed: %v", err)
 	}
@@ -60,10 +59,9 @@ func TestDualReplayJSON(t *testing.T) {
 }
 
 func TestDualReplaySSE(t *testing.T) {
-	replayer := NewDualReplayer()
 	rec := httptest.NewRecorder()
 
-	err := replayer.ReplaySSE(context.Background(), rec, "gpt-4o-mini", "One two three four five", 1*time.Millisecond)
+	err := ReplaySSE(context.Background(), rec, "gpt-4o-mini", "One two three four five", 1*time.Millisecond)
 	if err != nil {
 		t.Fatalf("ReplaySSE failed: %v", err)
 	}

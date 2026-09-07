@@ -12,30 +12,7 @@ type contextKey string
 const ActiveTokenKey contextKey = "active_token"
 
 // Middleware enforces Bearer token authentication and isolates credentials.
-type Middleware struct {
-	MasterSecret string
-	ValidTokens  map[string]bool
-}
-
-func NewMiddleware(masterSecret string, allowedTokens []string) *Middleware {
-	m := &Middleware{
-		MasterSecret: masterSecret,
-		ValidTokens:  make(map[string]bool),
-	}
-	if masterSecret != "" {
-		m.ValidTokens[masterSecret] = true
-	}
-	for _, tok := range allowedTokens {
-		tok = strings.TrimSpace(tok)
-		if tok != "" {
-			m.ValidTokens[tok] = true
-		}
-	}
-	return m
-}
-
-// Handler returns an HTTP middleware verifying the Bearer token.
-func (m *Middleware) Handler(next http.Handler) http.Handler {
+func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Allow unauthenticated health and version checks
 		if r.URL.Path == "/health" || r.URL.Path == "/version" {

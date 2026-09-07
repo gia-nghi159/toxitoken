@@ -27,16 +27,13 @@ import (
 func setupTestGateway(mockUpstreamURL string) (*httptest.Server, cache.CacheStore, ratelimit.Limiter) {
 	r := chi.NewRouter()
 
-	masterSecret := "test-secret"
-	authMw := auth.NewMiddleware(masterSecret, nil)
-	r.Use(authMw.Handler)
+	r.Use(auth.Middleware)
 
 	cacheStore := cache.NewMemoryStore()
 	limiter := ratelimit.NewMemoryLimiter(5, 60) // 5 reqs per 60s window
 	r.Use(ratelimit.MiddlewareHandler(limiter, 5, 60))
 
 	streamer := proxy.NewStreamer(cacheStore)
-	replayer := cache.NewDualReplayer()
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -66,10 +63,10 @@ func setupTestGateway(mockUpstreamURL string) (*httptest.Server, cache.CacheStor
 		if r.Header.Get("X-Proxy-Mode") == "mock" {
 			mockText := "Deterministic mock response from toxitoken."
 			if req.Stream {
-				_ = replayer.ReplaySSE(r.Context(), w, "toxi-mock-engine", mockText, 1*time.Millisecond)
+				_ = cache.ReplaySSE(r.Context(), w, "toxi-mock-engine", mockText, 1*time.Millisecond)
 				return
 			}
-			_ = replayer.ReplayJSON(w, "toxi-mock-engine", mockText)
+			_ = cache.ReplayJSON(w, "toxi-mock-engine", mockText)
 			return
 		}
 
@@ -91,13 +88,15 @@ func setupTestGateway(mockUpstreamURL string) (*httptest.Server, cache.CacheStor
 		}
 
 		// 3. Cache Hit
-		if cachedText, hit, err := cacheStore.Get(r.Context(), fingerprint); err == nil && hit {
-			if req.Stream {
-				_ = replayer.ReplaySSE(r.Context(), w, req.Model, cachedText, 1*time.Millisecond)
+		if strings.ToLower(r.Header.Get("Cache-Control")) != "no-cache" {
+			if cachedText, hit, err := cacheStore.Get(r.Context(), fingerprint); err == nil && hit {
+				if req.Stream {
+					_ = cache.ReplaySSE(r.Context(), w, req.Model, cachedText, 10*time.Millisecond)
+					return
+				}
+				_ = cache.ReplayJSON(w, req.Model, cachedText)
 				return
 			}
-			_ = replayer.ReplayJSON(w, req.Model, cachedText)
-			return
 		}
 
 		// 4. Upstream Forwarding

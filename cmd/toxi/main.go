@@ -26,20 +26,34 @@ var loginCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		urlFlag, _ := cmd.Flags().GetString("url")
 		tokenFlag, _ := cmd.Flags().GetString("token")
+		modeFlag, _ := cmd.Flags().GetString("mode")
+		chaosFlag, _ := cmd.Flags().GetString("chaos-config")
 
 		cfg, err := loadConfig()
 		if err != nil {
 			cfg = &CLIConfig{Mode: "live"}
 		}
 
-		if urlFlag != "" {
+		if cmd.Flags().Changed("url") {
 			cfg.GatewayURL = strings.TrimRight(urlFlag, "/")
 		} else if cfg.GatewayURL == "" {
 			cfg.GatewayURL = "http://localhost:8080"
 		}
 
-		if tokenFlag != "" {
+		if cmd.Flags().Changed("token") {
 			cfg.Token = tokenFlag
+		}
+
+		if cmd.Flags().Changed("mode") {
+			mode := strings.ToLower(modeFlag)
+			if mode != "live" && mode != "mock" && mode != "chaos" {
+				return fmt.Errorf("invalid mode: %s (must be live, mock, or chaos)", mode)
+			}
+			cfg.Mode = mode
+		}
+
+		if cmd.Flags().Changed("chaos-config") {
+			cfg.ChaosConfig = chaosFlag
 		}
 
 		if err := saveConfig(cfg); err != nil {
@@ -67,8 +81,8 @@ var modeCmd = &cobra.Command{
 		}
 
 		cfg.Mode = mode
-		chaosFlag, _ := cmd.Flags().GetString("chaos-config")
-		if chaosFlag != "" {
+		if cmd.Flags().Changed("chaos-config") {
+			chaosFlag, _ := cmd.Flags().GetString("chaos-config")
 			cfg.ChaosConfig = chaosFlag
 		}
 
@@ -77,6 +91,32 @@ var modeCmd = &cobra.Command{
 		}
 
 		fmt.Printf("✓ Toxitoken mode set to [%s]\n", mode)
+		return nil
+	},
+}
+
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show current configuration",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, err := loadConfig()
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+		
+		maskedToken := "<none>"
+		if len(cfg.Token) > 4 {
+			maskedToken = cfg.Token[:4] + "****"
+		} else if cfg.Token != "" {
+			maskedToken = "****"
+		}
+
+		fmt.Printf("Gateway: %s\nMode:    %s\n", cfg.GatewayURL, cfg.Mode)
+		if cfg.ChaosConfig != "" {
+			fmt.Printf("Chaos:   %s\n", cfg.ChaosConfig)
+		}
+		fmt.Printf("Token:   %s\n", maskedToken)
+		
 		return nil
 	},
 }
@@ -172,12 +212,17 @@ func executeCompletion(cmd *cobra.Command, cfg *CLIConfig, prompt string) error 
 	// Inject mode headers
 	if cfg.Mode == "mock" {
 		httpReq.Header.Set("X-Proxy-Mode", "mock")
+	}
+
+	noCache, _ := cmd.Flags().GetBool("no-cache")
+	if noCache {
+		httpReq.Header.Set("Cache-Control", "no-cache")
+	}
+
+	if cfg.ChaosConfig != "" {
+		httpReq.Header.Set("X-Chaos-Config", cfg.ChaosConfig)
 	} else if cfg.Mode == "chaos" {
-		chaosHeader := cfg.ChaosConfig
-		if chaosHeader == "" {
-			chaosHeader = "rate=1.0,delay=100ms"
-		}
-		httpReq.Header.Set("X-Chaos-Config", chaosHeader)
+		httpReq.Header.Set("X-Chaos-Config", "rate=1.0,delay=100ms")
 	}
 
 	client := &http.Client{Timeout: 0}
@@ -232,14 +277,19 @@ func executeCompletion(cmd *cobra.Command, cfg *CLIConfig, prompt string) error 
 func init() {
 	loginCmd.Flags().StringP("url", "u", "http://localhost:8080", "Toxitoken Gateway URL")
 	loginCmd.Flags().StringP("token", "t", "", "Client API Token")
+	loginCmd.Flags().StringP("mode", "m", "", "Gateway operating mode (live, mock, chaos)")
+	loginCmd.Flags().String("chaos-config", "", "Chaos configuration (e.g. 'rate=1.0,delay=500ms,drop_after=5')")
 
 	modeCmd.Flags().String("chaos-config", "", "Chaos configuration (e.g. 'rate=1.0,delay=500ms,drop_after=5')")
 
 	askCmd.Flags().StringP("model", "m", "gpt-4o-mini", "Model identifier")
+	askCmd.Flags().Bool("no-cache", false, "Bypass toxitoken caching")
 	pipeCmd.Flags().StringP("model", "m", "gpt-4o-mini", "Model identifier")
+	pipeCmd.Flags().Bool("no-cache", false, "Bypass toxitoken caching")
 
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(modeCmd)
+	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(askCmd)
 	rootCmd.AddCommand(pipeCmd)
 }

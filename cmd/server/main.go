@@ -36,9 +36,8 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// Initialize authentication middleware.
-	authMiddleware := auth.NewMiddleware(cfg.MasterSecret, nil)
-	r.Use(authMiddleware.Handler)
+	// Apply authentication middleware.
+	r.Use(auth.Middleware)
 
 	const rateLimitWindow int64 = 60 // seconds
 
@@ -67,7 +66,6 @@ func main() {
 	r.Use(ratelimit.MiddlewareHandler(limiter, 60, rateLimitWindow))
 
 	streamer := proxy.NewStreamer(cacheStore)
-	replayer := cache.NewDualReplayer()
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -108,10 +106,10 @@ func main() {
 		if proxyMode == "mock" || cfg.DefaultMode == "mock" {
 			mockText := "Deterministic mock response from toxitoken."
 			if req.Stream {
-				_ = replayer.ReplaySSE(r.Context(), w, "toxi-mock-engine", mockText, 10*time.Millisecond)
+				_ = cache.ReplaySSE(r.Context(), w, "toxi-mock-engine", mockText, 10*time.Millisecond)
 				return
 			}
-			_ = replayer.ReplayJSON(w, "toxi-mock-engine", mockText)
+			_ = cache.ReplayJSON(w, "toxi-mock-engine", mockText)
 			return
 		}
 
@@ -135,13 +133,15 @@ func main() {
 		}
 
 		// 3. Exact-Match Cache Check (SHA-256 Prompt Fingerprint)
-		if cachedText, hit, err := cacheStore.Get(r.Context(), fingerprint); err == nil && hit {
-			if req.Stream {
-				_ = replayer.ReplaySSE(r.Context(), w, req.Model, cachedText, 10*time.Millisecond)
+		if strings.ToLower(r.Header.Get("Cache-Control")) != "no-cache" {
+			if cachedText, hit, err := cacheStore.Get(r.Context(), fingerprint); err == nil && hit {
+				if req.Stream {
+					_ = cache.ReplaySSE(r.Context(), w, req.Model, cachedText, 10*time.Millisecond)
+					return
+				}
+				_ = cache.ReplayJSON(w, req.Model, cachedText)
 				return
 			}
-			_ = replayer.ReplayJSON(w, req.Model, cachedText)
-			return
 		}
 
 		// 4. Provider Translation: Google Gemini vs OpenAI Native
@@ -157,7 +157,7 @@ func main() {
 
 			// Resolve the Gemini Key (Sponsored vs BYOK)
 			geminiKey := cfg.GeminiKey
-			if activeToken != "" && activeToken != cfg.MasterSecret {
+			if activeToken != "" {
 				geminiKey = activeToken
 			}
 
@@ -177,7 +177,7 @@ func main() {
 		w.Header().Set("X-Cache", "MISS")
 		
 		// If it's not a BYOK token, reject it because we don't sponsor OpenAI anymore
-		if activeToken == cfg.MasterSecret || activeToken == "" {
+		if activeToken == "" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusPaymentRequired)
 			_, _ = w.Write([]byte(`{"error":{"message":"OpenAI requires a Bring Your Own Key (BYOK). Please provide your OpenAI API key in the token flag.","code":402}}`))

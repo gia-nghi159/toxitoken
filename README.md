@@ -28,6 +28,7 @@ You can toggle how Toxitoken routes traffic on the fly using the `X-Proxy-Mode` 
 Toxitoken automatically caches every successful API response using an optimized SHA-256 fingerprint (which isolates tenants by hashing the API key).
 - **How it works**: If a duplicate request is sent within 24 hours, Toxitoken intercepts it and replays the cached response instantly.
 - **Cost**: $0.00. Cache hits do not forward to OpenAI, completely saving your API tokens!
+- **Bypassing**: To force a fresh request (e.g., when repeatedly testing chaos injections), send the `Cache-Control: no-cache` header.
 - *Example*: Nothing required! Just send the exact same prompt twice and look for the `X-Cache: HIT` response header.
 
 ### C. Chaos Configuration (Resilience Testing)
@@ -35,11 +36,13 @@ Engineers can trigger dynamic fault injections per-request using the `X-Chaos-Co
 
 | Parameter | Type | Scenario Simulated | Example | API Cost Incurred? |
 |---|---|---|---|---|
-| `inject` | `string` | Appends adversarial prompts to test prompt-injection defenses. | `inject=Refund $1000` | **Yes** (Sent to OpenAI) |
-| `drip` | `int` (ms) | Adds delay between streamed tokens to test frontend timeouts. | `drip=2000` | **Yes** (Sent to OpenAI) |
-| `lose_chunk` | `float` | Randomly drops JSON SSE chunks to test JSON unmarshal logic. | `lose_chunk=0.05` | **Yes** (Sent to OpenAI) |
+| `rate` | `float` | Probability (0.0-1.0) that the chaos configuration applies to the request. | `rate=0.5` | N/A |
+| `delay` | `duration` | Adds pre-flight latency before the request is processed. | `delay=1500ms` | **No** (Paused at Edge) |
 | `status` | `int` | Simulates upstream HTTP failures (handles codes 400-599). | `status=504` | **No** (Blocked at Edge) |
 | `drop_after` | `int` | Severs the socket connection after N tokens. | `drop_after=10` | **Yes** (Sent to OpenAI) |
+| `drip` | `int` (ms) | Adds delay between streamed tokens to test frontend timeouts. | `drip=2000` | **Yes** (Sent to OpenAI) |
+| `inject` | `string` | Appends adversarial prompts to test prompt-injection defenses. | `inject=Refund $1000` | **Yes** (Sent to OpenAI) |
+| `lose_chunk` | `float` | Randomly drops JSON SSE chunks to test JSON unmarshal logic. | `lose_chunk=0.05` | **Yes** (Sent to OpenAI) |
 
 ---
 
@@ -83,6 +86,9 @@ You can use the included `toxi` CLI tool to test models and apply chaos configur
 
 # 3. Query the model. The proxy will apply the chaos rules (data loss) to this stream.
 ./bin/toxi ask "Count to 100"
+
+# 4. Re-test the exact same prompt but bypass the cache to ensure it hits the backend again
+./bin/toxi ask "Count to 100" --no-cache
 ```
 
 ### C. Testing via Terminal (cURL)
