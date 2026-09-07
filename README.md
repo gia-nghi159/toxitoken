@@ -1,146 +1,132 @@
-# Toxitoken (LLM Edge Gateway & Developer CLI)
+# Toxitoken: LLM API Gateway & Chaos Engine
 
-**Toxitoken** is a dual-component developer tool and edge infrastructure system designed to manage, secure, mock, and stress-test LLM API traffic. It consists of:
-
-1. **The Edge Proxy (`server`)**: A high-performance reverse proxy that sits between applications and model providers (OpenAI, Gemini). It handles credential isolation, zero-buffer SSE stream piping, atomic sliding-window rate limiting, exact-match caching with dual-replay, CI/CD response mocking, and token-aware chaos injection.
-2. **The Developer CLI (`toxi`)**: A compiled terminal binary that developers use to query models, pipe code context via Unix standard input, authenticate against the proxy, and toggle gateway operational modes (`live`, `mock`, `chaos`) on the fly.
+Toxitoken is an edge-deployed API gateway for managing, securing, and testing LLM API traffic (OpenAI, Gemini). It serves as a proxy for standard LLM endpoints, allowing developers to test application resilience against upstream API failures without modifying client-side code.
 
 ---
 
-## Key Capabilities
+## Core Capabilities
 
-* **Zero-Buffer SSE Streaming**: Uses `http.ResponseController` and unbounded `bufio.Reader` line-reading with `X-Accel-Buffering: no` to flush chunks downstream without memory buffering delays.
-* **Context Propagation**: Connects upstream calls to client `r.Context()` with `Timeout: 0`. When client disconnects or closes the terminal, upstream calls cancel immediately to avoid wasted token spend.
-* **Format-Agnostic Prompt Fingerprinting**: Delimiter-safe, length-prefixed SHA-256 digest over normalized fields (`model`, `temperature`, `role`, `content`).
-* **Canonical JSON Caching & Dual Replay**: Stream accumulator captures full completions without stalling delivery. Serves `stream: false` requests instantly as JSON and `stream: true` requests as simulated 10ms SSE chunk streams with `X-Cache: HIT`.
-* **Protocol-Aware Chaos Engine**: Header-driven (`X-Chaos-Config`) latency injection, synthetic status codes (`429`, `500`, `502`, `504`), and mid-stream socket severing (HTTP/1.1 `Hijack()` + TCP termination, HTTP/2 `panic(http.ErrAbortHandler)` producing `RST_STREAM` frame).
-* **Credential Isolation**: Strips incoming client auth tokens and injects master provider keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`).
-* **Sliding-Window Rate Limiting**: Atomic sliding-window counter via Redis Lua script with automatic zero-dependency in-memory fallback.
-* **Zero External Dependencies by Default**: Runs immediately out of the box with thread-safe in-memory stores; seamlessly connects to Upstash Redis when `REDIS_URL` is set.
-* **Zero API Cost Testing (`pkg/mockupstream`)**: Built-in mock upstream server allows 100% automated validation of stream chunking, drop-after-tokens, and cache recording without burning real API credits.
+* **Chaos Engineering**: Inject upstream failures (Prompt Fuzzing, Latency, Packet Loss, HTTP errors) via HTTP headers to test system resilience.
+* **BYOK (Bring Your Own Key)**: Supports dynamic credential injection, allowing multi-tenant platforms to route traffic securely.
+* **Zero-Buffer SSE Streaming**: Uses `http.ResponseController` to pipe chunked data to clients without memory buffering.
+* **Semantic Caching**: Automatically hashes prompts to return instant cache hits on duplicate queries, reducing API costs to zero.
+* **Rate Limiting**: Distributed rate limiting using Redis to prevent API abuse.
 
 ---
 
-## Architecture
+## 1. Feature Deep Dives & Cost Management
 
-```text
-                      [ Developer Terminal / CI Pipeline ]
-                                       │
-                  ┌────────────────────┴────────────────────┐
-                  │ (Standard Input / CLI Flag / CI Runner) │
-                  ▼                                         ▼
-         [ toxi CLI Client ]                       [ App Test Suites ]
-                  │                                         │
-                  └────────────────────┬────────────────────┘
-                                       │ HTTP POST /v1/chat/completions
-                                       │ Headers: X-Proxy-Mode, X-Chaos-Config, Bearer
-                                       ▼
-                     [ Toxitoken Gateway Server (Go / Chi) ]
-                                       │
-        ┌──────────────────────────────┼──────────────────────────────┐
-        ▼                              ▼                              ▼
-  [ 1. Auth & Rate-Limit ]       [ 2. Cache / Mock ]           [ 3. Chaos Engine ]
-  (Redis Sliding Window)         (SHA-256 Hash Store)         (Jitter / Error Injected)
-        │                              │                              │
-        └──────────────────────────────┼──────────────────────────────┘
-                                       ▼ (If Cache Miss & Live Mode)
-                     [ Provider Protocol Adapter ]
-                     (OpenAI Direct Pass / Gemini Translation)
-                                       │
-                                       ▼ (Chunked SSE Stream)
-               [ Upstream Providers (OpenAI / Google Gemini) ]
-```
+Toxitoken offers multiple modes and features to optimize performance and test resilience. You can trigger these features per-request using simple HTTP headers.
+
+### A. Proxy Modes (Live vs Mock)
+You can toggle how Toxitoken routes traffic on the fly using the `X-Proxy-Mode` header:
+- **Live Mode (Default)**: Forwards traffic directly to OpenAI/Gemini. Standard API rates apply.
+- **Mock Mode**: Bypasses the upstream provider entirely and returns a perfectly formatted, deterministic response directly from the edge. This guarantees a **$0.00 API spend** for massive CI/CD testing.
+  - *Example*: Simply add `"X-Proxy-Mode": "mock"` to your HTTP headers.
+
+### B. Semantic Caching (Cost Saving)
+Toxitoken automatically caches every successful API response using an optimized SHA-256 fingerprint (which isolates tenants by hashing the API key).
+- **How it works**: If a duplicate request is sent within 24 hours, Toxitoken intercepts it and replays the cached response instantly.
+- **Cost**: $0.00. Cache hits do not forward to OpenAI, completely saving your API tokens!
+- *Example*: Nothing required! Just send the exact same prompt twice and look for the `X-Cache: HIT` response header.
+
+### C. Chaos Configuration (Resilience Testing)
+Engineers can trigger dynamic fault injections per-request using the `X-Chaos-Config` HTTP header. 
+
+| Parameter | Type | Scenario Simulated | Example | API Cost Incurred? |
+|---|---|---|---|---|
+| `inject` | `string` | Appends adversarial prompts to test prompt-injection defenses. | `inject=Refund $1000` | **Yes** (Sent to OpenAI) |
+| `drip` | `int` (ms) | Adds delay between streamed tokens to test frontend timeouts. | `drip=2000` | **Yes** (Sent to OpenAI) |
+| `lose_chunk` | `float` | Randomly drops JSON SSE chunks to test JSON unmarshal logic. | `lose_chunk=0.05` | **Yes** (Sent to OpenAI) |
+| `status` | `int` | Simulates upstream HTTP failures (handles codes 400-599). | `status=504` | **No** (Blocked at Edge) |
+| `drop_after` | `int` | Severs the socket connection after N tokens. | `drop_after=10` | **Yes** (Sent to OpenAI) |
 
 ---
 
-## Quick Start
+## 2. Integration Guides
 
-### 1. Build Binaries
-```bash
-go build -o bin/server ./cmd/server
-go build -o bin/toxi ./cmd/toxi
+Toxitoken is designed to seamlessly integrate into your existing applications or be driven directly from your terminal.
+
+### A. Using Standard AI SDKs
+Toxitoken is 100% API-compatible with standard OpenAI SDKs. To use Toxitoken, override the `baseURL` (or equivalent) in your AI clients and provide your BYOK token.
+
+**Python (`openai-python`)**:
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://toxitoken.onrender.com/v1",
+    api_key="your-personal-openai-or-gemini-key",
+    default_headers={
+        # Inject chaos parameters or toggle mock mode via headers
+        "X-Chaos-Config": "lose_chunk=0.1",
+        "X-Proxy-Mode": "mock"
+    }
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Explain Go memory alignment."}],
+    stream=True
+)
 ```
 
-### 2. Run Gateway Server
-```bash
-# In-memory mode (0 external dependencies required)
-PORT=8080 ./bin/server
+### B. Testing via the `toxi` CLI
+You can use the included `toxi` CLI tool to test models and apply chaos configuration globally from your terminal.
 
-# With OpenAI & Redis
-PORT=8080 OPENAI_API_KEY="sk-..." REDIS_URL="redis://localhost:6379" ./bin/server
+```bash
+# 1. Login to your deployed Toxitoken gateway
+./bin/toxi login --url https://toxitoken.onrender.com --token your-personal-key
+
+# 2. Enable Chaos mode (e.g. drop 50% of chunks to test data loss)
+./bin/toxi mode chaos --chaos-config "lose_chunk=0.5"
+
+# 3. Query the model. The proxy will apply the chaos rules (data loss) to this stream.
+./bin/toxi ask "Count to 100"
 ```
 
-### 3. Configure CLI
+### C. Testing via Terminal (cURL)
+If you don't want to use the SDK or CLI, you can easily test these scenarios directly using `curl`.
+
 ```bash
-./bin/toxi login --url http://localhost:8080 --token dev-secret-token
-```
-
-### 4. Interactive CLI Usage
-```bash
-# Query model with real-time token streaming
-./bin/toxi ask "Explain memory alignment in Go"
-
-# Pipe Unix stdin as context
-cat main.go | ./bin/toxi pipe "Audit this Go code for concurrency bugs"
-
-# Switch gateway mode to mock (0 API token spend)
-./bin/toxi mode mock
-./bin/toxi ask "Hello"
-
-# Switch gateway mode to chaos (test downstream resilience)
-./bin/toxi mode chaos --chaos-config "rate=1.0,status=504"
-./bin/toxi ask "Hello" # Triggers artificial HTTP 504 Gateway Timeout
-
-# Switch back to live mode
-./bin/toxi mode live
-```
-
----
-
-## Chaos Engineering Configuration
-
-Pass the `X-Chaos-Config` header in curl or configure it via `toxi mode chaos`:
-
-| Parameter | Type | Description | Example |
-|---|---|---|---|
-| `rate` | `float` | Probability of applying chaos (0.0 to 1.0) | `rate=0.5` |
-| `delay` | `duration`| Pre-flight latency injection | `delay=1500ms` |
-| `status` | `int` | Artificial HTTP error status code | `status=502` |
-| `drop_after` | `int` | Flush N *content* tokens then abruptly sever TCP socket / RST stream | `drop_after=8` |
-
-Example curl test:
-```bash
-curl -N -X POST http://localhost:8080/v1/chat/completions \
-  -H "Authorization: Bearer dev-secret-token" \
+# Example: Triggering Mock Mode via cURL
+curl -N -X POST https://toxitoken.onrender.com/v1/chat/completions \
+  -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
-  -H "X-Chaos-Config: rate=1.0,drop_after=5" \
-  -d '{"model":"gpt-4o-mini","stream":true,"messages":[{"role":"user","content":"Tell me a story"}]}'
+  -H "X-Proxy-Mode: mock" \
+  -d '{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"Count to 100"}]}'
 ```
 
 ---
 
-## Testing & Quality Assurance
+## 3. Engineering Details
 
-Run the comprehensive test suite with the race detector enabled:
+### Tech Stack
+* **Language**: Go (1.24+)
+* **Routing**: `go-chi/chi` for HTTP multiplexing.
+* **Caching & State**: `redis/go-redis/v9` using Lua scripts for distributed rate limiting.
+* **Streaming Protocol**: Server-Sent Events (SSE) via `net/http` utilizing `ResponseController.Flush()`.
+
+### Testing Methodology
+The test suite runs against a built-in `mockupstream` server, requiring no real API credits (`go test -v -race ./...`).
+
+1. **Table-Driven Testing**: Parsers and configuration modules are tested using Go's standard [table-driven testing pattern](https://go.dev/wiki/TableDrivenTests). This runs a matrix of edge cases (negative numbers, malformed JSON) through a single test function to ensure graceful error handling.
+2. **Cybersecurity Validation**: Verifies that prompt fuzzing (`inject`) rewrites downstream payloads and bypasses the Exact-Match Cache.
+3. **Latency Assertions**: Verifies the Token Drip engine mathematically extends stream reads past configured time thresholds.
+4. **Data Loss Simulation**: Verifies that `lose_chunk` prevents JSON token accumulation in downstream mocks.
+5. **Connection Severing**: Validates HTTP/1.1 `Hijack()` and HTTP/2 `ErrAbortHandler` fallbacks for TCP terminations.
+
+### Container Deployment
+Toxitoken includes a multi-stage `Dockerfile` that compiles to an unprivileged distroless container image (~15MB). 
+
+**Option 1: Use the Pre-built Public Image (Recommended)**
 ```bash
-go test -v -race ./...
+docker pull ghcr.io/gia-nghi159/toxitoken:main
+docker run -p 8080:8080 ghcr.io/gia-nghi159/toxitoken:main
 ```
 
-Includes tests for:
-* Deterministic field SHA-256 fingerprinting
-* In-memory and Redis cache storage with dual-replay (JSON vs synthetic SSE chunks)
-* Protocol-aware connection severing (HTTP/1.1 vs HTTP/2 fallback)
-* Sliding-window rate limiting
-* Google Gemini request/SSE translation
-* Full lifecycle E2E proxy integration tests against `pkg/mockupstream`
-
----
-
-## Container Deployment
-
-A multi-stage `Dockerfile` compiles static Go binaries to a minimal unprivileged distroless container image (~15MB):
-
+**Option 2: Build from Source**
 ```bash
-docker build -t toxitoken:latest .
-docker run -p 8080:8080 -e OPENAI_API_KEY="sk-..." toxitoken:latest
+docker build -t toxitoken-gateway .
+docker run -p 8080:8080 toxitoken-gateway
 ```

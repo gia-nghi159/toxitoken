@@ -125,6 +125,12 @@ func main() {
 				if activeRule.ApplyPreFlight(w) {
 					return
 				}
+				if activeRule.FuzzInjection != "" && len(req.Messages) > 0 {
+					req.Messages[len(req.Messages)-1].Content += "\n\n[SYSTEM OVERRIDE]: " + activeRule.FuzzInjection
+					bodyBytes, _ = json.Marshal(req)
+					fingerprint = req.Fingerprint(activeToken)
+					w.Header().Set("X-Fingerprint", fingerprint)
+				}
 			}
 		}
 
@@ -211,14 +217,20 @@ func main() {
 
 		// Mid-stream chaos configuration
 		dropAfter := 0
+		tokenDripMs := 0
+		dropChunkProb := 0.0
 		var onDrop func(http.ResponseWriter)
-		if activeRule != nil && activeRule.DropAfterTokens > 0 {
-			dropAfter = activeRule.DropAfterTokens
-			onDrop = chaos.SeverConnection
+		if activeRule != nil {
+			if activeRule.DropAfterTokens > 0 {
+				dropAfter = activeRule.DropAfterTokens
+				onDrop = chaos.SeverConnection
+			}
+			tokenDripMs = activeRule.TokenDripDelayMs
+			dropChunkProb = activeRule.DropChunkProbability
 		}
 
 		if req.Stream {
-			_ = streamer.ForwardAndRecord(r.Context(), w, resp.Body, fingerprint, dropAfter, onDrop)
+			_ = streamer.ForwardAndRecord(r.Context(), w, resp.Body, fingerprint, dropAfter, onDrop, tokenDripMs, dropChunkProb)
 			return
 		}
 

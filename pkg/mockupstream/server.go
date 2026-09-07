@@ -19,6 +19,7 @@ type Server struct {
 	RequestCount   int64
 	SimulateError  int // Specify HTTP error status code (e.g., 401, 429, 500)
 	CustomResponse string
+	LastRequest    *models.ChatCompletionRequest // Capture last received request
 }
 
 // NewServer initializes and returns a mock upstream server.
@@ -44,6 +45,8 @@ func NewServer() *Server {
 			_, _ = w.Write([]byte(`{"error":{"message":"invalid request body"}}`))
 			return
 		}
+		
+		mock.LastRequest = &req
 
 		respText := "Deterministic mock response from toxitoken."
 		if mock.CustomResponse != "" {

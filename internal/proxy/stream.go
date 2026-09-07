@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
+	"time"
 
 	"toxitoken/pkg/models"
 )
@@ -33,6 +35,8 @@ func (s *Streamer) ForwardAndRecord(
 	cacheKey string,
 	dropAfterTokens int,
 	onDrop func(http.ResponseWriter),
+	tokenDripMs int,
+	dropChunkProb float64,
 ) error {
 	defer upstreamBody.Close()
 
@@ -57,6 +61,18 @@ func (s *Streamer) ForwardAndRecord(
 			if dropAfterTokens > 0 && tokenCount >= dropAfterTokens && onDrop != nil {
 				onDrop(w)
 				return nil
+			}
+
+			// Data Loss Chaos Simulation (Drop Chunk)
+			if dropChunkProb > 0 && bytes.HasPrefix(bytes.TrimSpace(line), []byte("data: ")) {
+				if rand.Float64() < dropChunkProb {
+					continue // Skip writing this chunk to simulate TCP packet loss
+				}
+			}
+
+			// Token Drip Chaos Simulation (Latency Jitter)
+			if tokenDripMs > 0 && bytes.HasPrefix(bytes.TrimSpace(line), []byte("data: ")) {
+				time.Sleep(time.Duration(tokenDripMs) * time.Millisecond)
 			}
 
 			// Immediate zero-buffer flush to downstream client

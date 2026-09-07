@@ -12,10 +12,13 @@ import (
 
 // Rule defines parameters for chaos injection.
 type Rule struct {
-	Rate            float64       // Define probability (0.0 to 1.0).
-	Delay           time.Duration // Define pre-flight latency.
-	StatusCode      int           // Define artificial HTTP error status code (e.g., 429, 500).
-	DropAfterTokens int           // Sever stream after flushing N content tokens.
+	Rate                 float64       // Define probability (0.0 to 1.0).
+	Delay                time.Duration // Define pre-flight latency.
+	StatusCode           int           // Define artificial HTTP error status code (e.g., 429, 500).
+	DropAfterTokens      int           // Sever stream after flushing N content tokens.
+	TokenDripDelayMs     int           // Sleep between each streamed chunk.
+	FuzzInjection        string        // Adversarial text to secretly append to prompt.
+	DropChunkProbability float64       // Chance to drop a valid JSON chunk mid-stream.
 }
 
 // ParseConfig parses chaos configuration header.
@@ -60,6 +63,23 @@ func ParseConfig(header string) (*Rule, error) {
 		case "drop_after":
 			if da, err := strconv.Atoi(v); err == nil {
 				rule.DropAfterTokens = da
+			}
+		case "drip":
+			if ms, err := strconv.Atoi(v); err == nil {
+				if ms > 0 {
+					rule.TokenDripDelayMs = ms
+				}
+			}
+		case "inject":
+			rule.FuzzInjection = v
+		case "lose_chunk":
+			if p, err := strconv.ParseFloat(v, 64); err == nil {
+				if p < 0 {
+					p = 0
+				} else if p > 1 {
+					p = 1
+				}
+				rule.DropChunkProbability = p
 			}
 		}
 	}
