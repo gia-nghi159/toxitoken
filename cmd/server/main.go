@@ -25,6 +25,7 @@ import (
 	"toxitoken/internal/proxy"
 	"toxitoken/internal/ratelimit"
 	"toxitoken/pkg/models"
+	"toxitoken/playground"
 )
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -94,8 +95,8 @@ func main() {
 		_, _ = w.Write([]byte(`{"version":"1.0.0"}`))
 	})
 
-	// Serve the UI Playground
-	r.Handle("/*", http.FileServer(http.Dir("./playground")))
+	// Serve the UI Playground from embedded binary
+	r.Handle("/*", http.FileServer(http.FS(playground.FS)))
 
 	r.With(auth.Middleware).Post("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		bodyBytes, err := io.ReadAll(r.Body)
