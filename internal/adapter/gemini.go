@@ -149,6 +149,7 @@ func ForwardGeminiStream(
 						for _, tokenStr := range tokens {
 							if dropAfter > 0 && tokenCount >= dropAfter && onDrop != nil {
 								_, _ = w.Write([]byte("data: {\"brutal_abort_for_drop_after\n\n"))
+								_ = rc.Flush()
 								onDrop(w)
 								return nil
 							}

@@ -65,6 +65,7 @@ func (s *Streamer) ForwardAndRecord(
 					// Read the remaining trailing empty line of SSE frame if present
 					if dropAfterTokens > 0 && tokenCount >= dropAfterTokens && onDrop != nil {
 						_, _ = w.Write([]byte("data: {\"brutal_abort_for_drop_after\n\n"))
+						_ = rc.Flush()
 						onDrop(w)
 						return nil
 					}
@@ -86,6 +87,7 @@ func (s *Streamer) ForwardAndRecord(
 							// Mid-Stream Chaos Severing trigger
 							if dropAfterTokens > 0 && tokenCount >= dropAfterTokens && onDrop != nil {
 								_, _ = w.Write([]byte("data: {\"brutal_abort_for_drop_after\n\n"))
+								_ = rc.Flush()
 								onDrop(w)
 								return nil
 							}
@@ -133,6 +135,7 @@ func (s *Streamer) ForwardAndRecord(
 						// Pass through chunks with no content delta (e.g. finish reason)
 						if dropAfterTokens > 0 && tokenCount >= dropAfterTokens && onDrop != nil {
 							_, _ = w.Write([]byte("data: {\"brutal_abort_for_drop_after\n\n"))
+							_ = rc.Flush()
 							onDrop(w)
 							return nil
 						}
@@ -143,6 +146,7 @@ func (s *Streamer) ForwardAndRecord(
 					// Pass through unparseable data chunks
 					if dropAfterTokens > 0 && tokenCount >= dropAfterTokens && onDrop != nil {
 						_, _ = w.Write([]byte("data: {\"brutal_abort_for_drop_after\n\n"))
+						_ = rc.Flush()
 						onDrop(w)
 						return nil
 					}
