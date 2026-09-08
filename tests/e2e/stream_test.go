@@ -454,8 +454,15 @@ func TestE2EFullGatewayLifecycle(t *testing.T) {
 		tokens := 0
 		for {
 			line, err := reader.ReadBytes('\n')
-			if len(line) > 0 && bytes.HasPrefix(bytes.TrimSpace(line), []byte("data: {")) {
-				tokens++
+			if len(line) > 0 {
+				trimmed := bytes.TrimSpace(line)
+				if bytes.HasPrefix(trimmed, []byte("data: {")) {
+					payload := bytes.TrimPrefix(trimmed, []byte("data: "))
+					var chunk models.ChatCompletionChunk
+					if jsonErr := json.Unmarshal(payload, &chunk); jsonErr == nil {
+						tokens++
+					}
+				}
 			}
 			if err != nil {
 				break

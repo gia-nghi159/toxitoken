@@ -148,15 +148,44 @@ func ForwardGeminiStream(
 						tokens := chaos.ApproximateTokens(parts[0].Text)
 						for _, tokenStr := range tokens {
 							if dropAfter > 0 && tokenCount >= dropAfter && onDrop != nil {
+								_, _ = w.Write([]byte("data: {\"brutal_abort_for_drop_after\n\n"))
 								onDrop(w)
 								return nil
 							}
 							if dropChunkProb > 0 && rand.Float64() < dropChunkProb {
 								tokenCount++
+								
+								// Write exactly half the payload to corrupt the client's parser
+								chunk := models.ChatCompletionChunk{
+									ID:      cmplID,
+									Object:  "chat.completion.chunk",
+									Created: time.Now().Unix(),
+									Model:   model,
+									Choices: []models.ChunkChoice{
+										{
+											Index: 0,
+											Delta: models.ChunkDelta{
+												Content: tokenStr,
+											},
+										},
+									},
+								}
+								chunkJSON, _ := json.Marshal(chunk)
+								
+								_, _ = w.Write([]byte("data: "))
+								if len(chunkJSON) > 1 {
+									_, _ = w.Write(chunkJSON[:len(chunkJSON)/2])
+								}
+								_, _ = w.Write([]byte("\n\n"))
+								_ = rc.Flush()
 								continue
 							}
 							if tokenDripMs > 0 {
-								time.Sleep(time.Duration(tokenDripMs) * time.Millisecond)
+								jitter := 1
+								if maxJ := tokenDripMs * 2; maxJ > 1 {
+									jitter = rand.Intn(maxJ)
+								}
+								time.Sleep(time.Duration(jitter) * time.Millisecond)
 							}
 							
 							tokenCount++

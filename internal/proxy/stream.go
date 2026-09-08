@@ -64,6 +64,7 @@ func (s *Streamer) ForwardAndRecord(
 				if bytes.Equal(payload, []byte("[DONE]")) {
 					// Read the remaining trailing empty line of SSE frame if present
 					if dropAfterTokens > 0 && tokenCount >= dropAfterTokens && onDrop != nil {
+						_, _ = w.Write([]byte("data: {\"brutal_abort_for_drop_after\n\n"))
 						onDrop(w)
 						return nil
 					}
@@ -84,6 +85,7 @@ func (s *Streamer) ForwardAndRecord(
 						for _, tokenStr := range tokens {
 							// Mid-Stream Chaos Severing trigger
 							if dropAfterTokens > 0 && tokenCount >= dropAfterTokens && onDrop != nil {
+								_, _ = w.Write([]byte("data: {\"brutal_abort_for_drop_after\n\n"))
 								onDrop(w)
 								return nil
 							}
@@ -91,12 +93,28 @@ func (s *Streamer) ForwardAndRecord(
 							// Data Loss Chaos Simulation (Drop Chunk)
 							if dropChunkProb > 0 && rand.Float64() < dropChunkProb {
 								tokenCount++ // Still advance count
+								
+								// Write exactly half the payload to corrupt the client's parser
+								subChunk := chunk
+								subChunk.Choices[0].Delta.Content = tokenStr
+								chunkJSON, _ := json.Marshal(subChunk)
+								
+								_, _ = w.Write([]byte("data: "))
+								if len(chunkJSON) > 1 {
+									_, _ = w.Write(chunkJSON[:len(chunkJSON)/2])
+								}
+								_, _ = w.Write([]byte("\n\n"))
+								_ = rc.Flush()
 								continue
 							}
 
 							// Token Drip Chaos Simulation (Latency Jitter)
 							if tokenDripMs > 0 {
-								time.Sleep(time.Duration(tokenDripMs) * time.Millisecond)
+								jitter := 1
+								if maxJ := tokenDripMs * 2; maxJ > 1 {
+									jitter = rand.Intn(maxJ)
+								}
+								time.Sleep(time.Duration(jitter) * time.Millisecond)
 							}
 
 							tokenCount++
@@ -114,6 +132,7 @@ func (s *Streamer) ForwardAndRecord(
 					} else {
 						// Pass through chunks with no content delta (e.g. finish reason)
 						if dropAfterTokens > 0 && tokenCount >= dropAfterTokens && onDrop != nil {
+							_, _ = w.Write([]byte("data: {\"brutal_abort_for_drop_after\n\n"))
 							onDrop(w)
 							return nil
 						}
@@ -123,6 +142,7 @@ func (s *Streamer) ForwardAndRecord(
 				} else {
 					// Pass through unparseable data chunks
 					if dropAfterTokens > 0 && tokenCount >= dropAfterTokens && onDrop != nil {
+						_, _ = w.Write([]byte("data: {\"brutal_abort_for_drop_after\n\n"))
 						onDrop(w)
 						return nil
 					}

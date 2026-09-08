@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -59,8 +60,13 @@
             letter-spacing: 1px;
         }
 
-        .green-theme h2 { color: var(--accent-green); }
-        .red-theme h2 { color: var(--accent-red); }
+        .green-theme h2 {
+            color: var(--accent-green);
+        }
+
+        .red-theme h2 {
+            color: var(--accent-red);
+        }
 
         .form-group {
             display: flex;
@@ -73,7 +79,9 @@
             color: var(--text-muted);
         }
 
-        input[type="text"], input[type="password"], input[type="number"] {
+        input[type="text"],
+        input[type="password"],
+        input[type="number"] {
             background-color: var(--bg-dark);
             border: 1px solid var(--border-color);
             color: var(--text-main);
@@ -81,14 +89,19 @@
             border-radius: 6px;
             font-family: monospace;
         }
-        
+
         input:focus {
             outline: none;
             border-color: var(--text-muted);
         }
 
-        .green-theme input:focus { border-color: var(--accent-green); }
-        .red-theme input:focus { border-color: var(--accent-red); }
+        .green-theme input:focus {
+            border-color: var(--accent-green);
+        }
+
+        .red-theme input:focus {
+            border-color: var(--accent-red);
+        }
 
         .checkbox-group {
             display: flex;
@@ -107,8 +120,10 @@
             letter-spacing: 1px;
         }
 
-        button:hover { opacity: 0.8; }
-        
+        button:hover {
+            opacity: 0.8;
+        }
+
         .btn-send {
             background: linear-gradient(135deg, var(--accent-red), var(--accent-green));
             color: white;
@@ -128,9 +143,16 @@
             line-height: 1.5;
         }
 
-        .user-msg { color: var(--accent-green); margin-bottom: 10px;}
-        .bot-msg { color: var(--text-main); margin-bottom: 20px;}
-        
+        .user-msg {
+            color: var(--accent-green);
+            margin-bottom: 10px;
+        }
+
+        .bot-msg {
+            color: var(--text-main);
+            margin-bottom: 20px;
+        }
+
         #prompt-input {
             width: 100%;
             height: 80px;
@@ -143,29 +165,31 @@
             font-family: inherit;
             box-sizing: border-box;
         }
+
         #prompt-input:focus {
             outline: none;
             border-color: var(--accent-green);
         }
     </style>
 </head>
+
 <body>
 
     <div class="sidebar">
         <!-- Settings Panel -->
         <div class="panel green-theme">
             <h2>BYOK Settings</h2>
-            
+
             <div class="form-group">
                 <label>Gateway URL</label>
-                <input type="text" id="cfg-url" value="http://localhost:8080">
+                <input type="text" id="cfg-url" value="https://toxitoken.onrender.com">
             </div>
 
             <div class="form-group">
                 <label>Model</label>
-                <input type="text" id="cfg-model" value="gpt-4o-mini" placeholder="e.g. gemini-3.5-flash">
+                <input type="text" id="cfg-model" value="gemini-3.5-flash">
             </div>
-            
+
             <div class="form-group">
                 <label>API Key (Bearer Token)</label>
                 <input type="password" id="cfg-token" placeholder="sk-...">
@@ -175,7 +199,7 @@
                 <input type="checkbox" id="cfg-mock">
                 <label for="cfg-mock">Enable Mock Mode</label>
             </div>
-            
+
             <div class="checkbox-group">
                 <input type="checkbox" id="cfg-nocache">
                 <label for="cfg-nocache">Bypass Semantic Cache</label>
@@ -185,7 +209,7 @@
         <!-- Chaos Engine Panel -->
         <div class="panel red-theme">
             <h2>Chaos Engine</h2>
-            
+
             <div class="form-group">
                 <label>Rate (0.0 - 1.0)</label>
                 <input type="number" id="chaos-rate" value="1.0" step="0.1" min="0" max="1">
@@ -210,7 +234,7 @@
                 <label>Drip Delay (ms)</label>
                 <input type="number" id="chaos-drip" placeholder="Empty = none">
             </div>
-            
+
             <div class="form-group">
                 <label>Lose Chunk Prob (0.0 - 1.0)</label>
                 <input type="number" id="chaos-lose" placeholder="Empty = none" step="0.01">
@@ -226,7 +250,7 @@
     <!-- Chat Area -->
     <div class="chat-area panel">
         <div id="chat-output"></div>
-        
+
         <div style="display:flex; flex-direction:column;">
             <textarea id="prompt-input" placeholder="Type a prompt to test the Toxitoken gateway..."></textarea>
             <button class="btn-send" onclick="sendRequest()">Send Stream</button>
@@ -234,7 +258,7 @@
     </div>
 
     <script>
-        document.getElementById('prompt-input').addEventListener('keydown', function(e) {
+        document.getElementById('prompt-input').addEventListener('keydown', function (e) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendRequest();
@@ -243,28 +267,28 @@
 
         function buildChaosConfig() {
             const parts = [];
-            
+
             const rate = document.getElementById('chaos-rate').value;
             if (rate && rate !== "1.0") parts.push(`rate=${rate}`);
-            
+
             const delay = document.getElementById('chaos-delay').value;
             if (delay) parts.push(`delay=${delay}`);
-            
+
             const status = document.getElementById('chaos-status').value;
             if (status) parts.push(`status=${status}`);
-            
+
             const drop = document.getElementById('chaos-drop').value;
             if (drop) parts.push(`drop_after=${drop}`);
-            
+
             const drip = document.getElementById('chaos-drip').value;
             if (drip) parts.push(`drip=${drip}`);
-            
+
             const lose = document.getElementById('chaos-lose').value;
             if (lose) parts.push(`lose_chunk=${lose}`);
-            
+
             const inject = document.getElementById('chaos-inject').value;
             if (inject) parts.push(`inject=${inject}`);
-            
+
             return parts.join(',');
         }
 
@@ -277,7 +301,7 @@
             document.getElementById('prompt-input').value = '';
             output.innerHTML += `<div class="user-msg">> ${prompt}</div><div class="bot-msg" id="current-bot"></div>`;
             const botMsgDiv = document.getElementById('current-bot');
-            
+
             // Read configurations
             const url = document.getElementById('cfg-url').value.replace(/\/$/, '') + '/v1/chat/completions';
             const model = document.getElementById('cfg-model').value.trim() || 'gpt-4o-mini';
@@ -303,7 +327,7 @@
 
             try {
                 const response = await fetch(url, { method: "POST", headers, body });
-                
+
                 if (!response.ok) {
                     const errText = await response.text();
                     botMsgDiv.innerHTML = `<span style="color:var(--accent-red)">HTTP ${response.status} Error: ${errText}</span>`;
@@ -324,13 +348,13 @@
                         buffer += decoder.decode(value, { stream: true });
                         const lines = buffer.split('\n');
                         buffer = lines.pop(); // Keep the last incomplete line in the buffer
-                        
+
                         for (let line of lines) {
                             line = line.trim();
                             if (line.startsWith('data: ')) {
                                 const payload = line.replace('data: ', '');
                                 if (payload === '[DONE]') break;
-                                
+
                                 try {
                                     const parsed = JSON.parse(payload);
                                     if (parsed.choices && parsed.choices.length > 0) {
@@ -349,7 +373,7 @@
                         }
                     }
                 }
-                
+
                 botMsgDiv.removeAttribute("id");
 
             } catch (err) {
@@ -359,4 +383,5 @@
         }
     </script>
 </body>
+
 </html>
