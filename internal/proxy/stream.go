@@ -11,7 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
+	
+	"toxitoken/internal/chaos"
 	"toxitoken/pkg/models"
 )
 
@@ -57,38 +58,17 @@ func (s *Streamer) ForwardAndRecord(
 		// Read line-by-line without 64KB max buffer constraint
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 {
-			// Mid-Stream Chaos Severing trigger
-			if dropAfterTokens > 0 && tokenCount >= dropAfterTokens && onDrop != nil {
-				onDrop(w)
-				return nil
-			}
-
-			// Data Loss Chaos Simulation (Drop Chunk)
-			if dropChunkProb > 0 && bytes.HasPrefix(bytes.TrimSpace(line), []byte("data: ")) {
-				if rand.Float64() < dropChunkProb {
-					continue // Skip writing this chunk to simulate TCP packet loss
-				}
-			}
-
-			// Token Drip Chaos Simulation (Latency Jitter)
-			if tokenDripMs > 0 && bytes.HasPrefix(bytes.TrimSpace(line), []byte("data: ")) {
-				time.Sleep(time.Duration(tokenDripMs) * time.Millisecond)
-			}
-
-			// Immediate zero-buffer flush to downstream client
-			if _, writeErr := w.Write(line); writeErr != nil {
-				return writeErr
-			}
-			if flushErr := rc.Flush(); flushErr != nil {
-				return flushErr
-			}
-
-			// Intercept and accumulate tokens for caching
 			trimmed := bytes.TrimSpace(line)
 			if bytes.HasPrefix(trimmed, []byte("data: ")) {
 				payload := bytes.TrimPrefix(trimmed, []byte("data: "))
 				if bytes.Equal(payload, []byte("[DONE]")) {
 					// Read the remaining trailing empty line of SSE frame if present
+					if dropAfterTokens > 0 && tokenCount >= dropAfterTokens && onDrop != nil {
+						onDrop(w)
+						return nil
+					}
+					_, _ = w.Write(line)
+					_ = rc.Flush()
 					if nextLine, _ := reader.ReadBytes('\n'); len(nextLine) > 0 {
 						_, _ = w.Write(nextLine)
 						_ = rc.Flush()
@@ -100,13 +80,58 @@ func (s *Streamer) ForwardAndRecord(
 				if err := json.Unmarshal(payload, &chunk); err == nil && len(chunk.Choices) > 0 {
 					textDelta := chunk.Choices[0].Delta.Content
 					if textDelta != "" {
-						// tokenCount tracks non-empty content deltas only.
-						// Role-only preamble chunks and finish_reason frames are not counted.
-						// dropAfterTokens must be interpreted relative to content tokens, not raw SSE frames.
-						tokenCount++
-						contentAccumulator.WriteString(textDelta)
+						tokens := chaos.ApproximateTokens(textDelta)
+						for _, tokenStr := range tokens {
+							// Mid-Stream Chaos Severing trigger
+							if dropAfterTokens > 0 && tokenCount >= dropAfterTokens && onDrop != nil {
+								onDrop(w)
+								return nil
+							}
+
+							// Data Loss Chaos Simulation (Drop Chunk)
+							if dropChunkProb > 0 && rand.Float64() < dropChunkProb {
+								tokenCount++ // Still advance count
+								continue
+							}
+
+							// Token Drip Chaos Simulation (Latency Jitter)
+							if tokenDripMs > 0 {
+								time.Sleep(time.Duration(tokenDripMs) * time.Millisecond)
+							}
+
+							tokenCount++
+							contentAccumulator.WriteString(tokenStr)
+							
+							subChunk := chunk
+							subChunk.Choices[0].Delta.Content = tokenStr
+							chunkJSON, _ := json.Marshal(subChunk)
+							
+							_, _ = w.Write([]byte("data: "))
+							_, _ = w.Write(chunkJSON)
+							_, _ = w.Write([]byte("\n\n"))
+							_ = rc.Flush()
+						}
+					} else {
+						// Pass through chunks with no content delta (e.g. finish reason)
+						if dropAfterTokens > 0 && tokenCount >= dropAfterTokens && onDrop != nil {
+							onDrop(w)
+							return nil
+						}
+						_, _ = w.Write(line)
+						_ = rc.Flush()
 					}
+				} else {
+					// Pass through unparseable data chunks
+					if dropAfterTokens > 0 && tokenCount >= dropAfterTokens && onDrop != nil {
+						onDrop(w)
+						return nil
+					}
+					_, _ = w.Write(line)
+					_ = rc.Flush()
 				}
+			} else {
+				// Empty line separating SSE events
+				_, _ = w.Write(line)
 			}
 		}
 
