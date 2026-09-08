@@ -95,6 +95,9 @@ func main() {
 		_, _ = w.Write([]byte(`{"version":"1.0.0"}`))
 	})
 
+	// Serve the UI Playground
+	r.Handle("/*", http.FileServer(http.Dir("./playground")))
+
 	r.Post("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
