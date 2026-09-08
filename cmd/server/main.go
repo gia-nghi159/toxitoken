@@ -52,8 +52,7 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware)
 
-	// Apply authentication middleware.
-	r.Use(auth.Middleware)
+	// Apply authentication middleware only to specific routes later.
 
 	const rateLimitWindow int64 = 60 // seconds
 
@@ -98,7 +97,7 @@ func main() {
 	// Serve the UI Playground
 	r.Handle("/*", http.FileServer(http.Dir("./playground")))
 
-	r.Post("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+	r.With(auth.Middleware).Post("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
