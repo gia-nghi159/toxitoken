@@ -107,6 +107,54 @@ curl -N -X POST https://toxitoken.onrender.com/v1/chat/completions \
 
 ## 3. Engineering Details
 
+### Architecture Diagram
+<details>
+<summary><b>Click to expand the Sequence Diagram</b></summary>
+
+```mermaid
+sequenceDiagram
+    participant C as Client (SDK / UI / CLI)
+    box Toxitoken Gateway (Edge)
+        participant A as Auth & Rate Limit
+        participant Ch as Chaos Engine
+        participant Ca as Semantic Cache
+    end
+    participant U as Upstream (OpenAI / Gemini)
+
+    %% 1. Request Initiation
+    C->>A: POST /v1/chat/completions<br/>(Prompt + BYOK Token + X-Chaos-Config)
+    
+    %% 2. Security & Guardrails
+    Note over A: Strip Authorization Header.<br/>Check Redis Rate Limits.
+    A->>Ch: Authorized Request
+    
+    %% 3. Chaos Injection
+    Note over Ch: Parse X-Chaos-Config<br/>Apply 'delay', 'status', 'inject'
+    
+    %% 4. Caching
+    Ch->>Ca: Generate SHA-256 Fingerprint
+    
+    alt Cache Hit (Exact Match)
+        Note over Ca: Found in Redis!
+        Ca-->>C: Stream Cached SSE Response<br/>(Cost: $0.00)
+    else Cache Miss
+        %% 5. Upstream Forwarding
+        Ca->>U: Forward Request<br/>(Attach BYOK Token)
+        Note over U: LLM Generation
+        
+        %% 6. Streaming & Mid-flight Chaos
+        loop SSE Chunks
+            U-->>Ch: Stream chunk
+            Note over Ch: Apply 'drip' latency<br/>Apply 'lose_chunk'
+            Ch-->>C: Flush chunk to Client
+        end
+        
+        %% 7. Async Cache Save
+        Note over Ca: Async: Save full stream<br/>to Redis for next time.
+    end
+```
+</details>
+
 ### Tech Stack
 * **Language**: Go (1.24+)
 * **Routing**: `go-chi/chi` for HTTP multiplexing.
