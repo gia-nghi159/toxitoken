@@ -178,7 +178,7 @@ func main() {
 			}
 
 			if req.Stream {
-				_ = adapter.ForwardGeminiStream(r.Context(), w, geminiReq, req.Model, geminiKey, "")
+				_ = adapter.ForwardGeminiStream(r.Context(), w, geminiReq, req.Model, geminiKey, "", activeRule)
 				return
 			}
 

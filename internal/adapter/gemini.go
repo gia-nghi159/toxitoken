@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
 	"time"
 
+	"toxitoken/internal/chaos"
 	"toxitoken/pkg/models"
 )
 
@@ -77,6 +79,7 @@ func ForwardGeminiStream(
 	model string,
 	apiKey string,
 	baseURL string,
+	activeRule *chaos.Rule,
 ) error {
 	if baseURL == "" {
 		baseURL = "https://generativelanguage.googleapis.com"
@@ -116,7 +119,21 @@ func ForwardGeminiStream(
 	w.WriteHeader(http.StatusOK)
 
 	reader := bufio.NewReader(resp.Body)
-	cmplID := fmt.Sprintf("gemini-cmpl-%d", time.Now().UnixNano())
+	cmplID := fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
+
+	dropAfter := 0
+	tokenDripMs := 0
+	dropChunkProb := 0.0
+	var onDrop func(http.ResponseWriter)
+	if activeRule != nil {
+		if activeRule.DropAfterTokens > 0 {
+			dropAfter = activeRule.DropAfterTokens
+			onDrop = chaos.SeverConnection
+		}
+		tokenDripMs = activeRule.TokenDripDelayMs
+		dropChunkProb = activeRule.DropChunkProbability
+	}
+	tokenCount := 0
 
 	for {
 		line, err := reader.ReadBytes('\n')
@@ -128,6 +145,19 @@ func ForwardGeminiStream(
 				if jsonErr := json.Unmarshal(payload, &gResp); jsonErr == nil && len(gResp.Candidates) > 0 {
 					parts := gResp.Candidates[0].Content.Parts
 					if len(parts) > 0 && parts[0].Text != "" {
+						if dropAfter > 0 && tokenCount >= dropAfter && onDrop != nil {
+							onDrop(w)
+							return nil
+						}
+						if dropChunkProb > 0 && rand.Float64() < dropChunkProb {
+							continue
+						}
+						if tokenDripMs > 0 {
+							time.Sleep(time.Duration(tokenDripMs) * time.Millisecond)
+						}
+						
+						tokenCount++
+						
 						chunk := models.ChatCompletionChunk{
 							ID:      cmplID,
 							Object:  "chat.completion.chunk",

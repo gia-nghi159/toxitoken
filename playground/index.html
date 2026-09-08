@@ -160,6 +160,11 @@
                 <label>Gateway URL</label>
                 <input type="text" id="cfg-url" value="http://localhost:8080">
             </div>
+
+            <div class="form-group">
+                <label>Model</label>
+                <input type="text" id="cfg-model" value="gpt-4o-mini" placeholder="e.g. gemini-3.5-flash">
+            </div>
             
             <div class="form-group">
                 <label>API Key (Bearer Token)</label>
@@ -229,6 +234,13 @@
     </div>
 
     <script>
+        document.getElementById('prompt-input').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendRequest();
+            }
+        });
+
         function buildChaosConfig() {
             const parts = [];
             
@@ -268,6 +280,7 @@
             
             // Read configurations
             const url = document.getElementById('cfg-url').value.replace(/\/$/, '') + '/v1/chat/completions';
+            const model = document.getElementById('cfg-model').value.trim() || 'gpt-4o-mini';
             const token = document.getElementById('cfg-token').value.trim();
             const isMock = document.getElementById('cfg-mock').checked;
             const noCache = document.getElementById('cfg-nocache').checked;
@@ -283,7 +296,7 @@
             if (noCache) headers["Cache-Control"] = "no-cache";
 
             const body = JSON.stringify({
-                model: "gpt-4o-mini",
+                model: model,
                 stream: true,
                 messages: [{ role: "user", content: prompt }]
             });

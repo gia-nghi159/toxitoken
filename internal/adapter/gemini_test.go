@@ -52,7 +52,7 @@ func TestForwardGeminiStream(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	err := ForwardGeminiStream(context.Background(), rec, gReq, "gemini-2.5-flash", "test-key", geminiServer.URL)
+	err := ForwardGeminiStream(context.Background(), rec, gReq, "gemini-2.5-flash", "test-key", geminiServer.URL, nil)
 	if err != nil {
 		t.Fatalf("ForwardGeminiStream failed: %v", err)
 	}
