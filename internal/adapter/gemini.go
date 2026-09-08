@@ -50,6 +50,24 @@ func IsGeminiModel(model string) bool {
 	return strings.HasPrefix(lower, "gemini")
 }
 
+// approximateTokens naively splits text into tokens (keeping spaces) to simulate 
+// OpenAI's fine-grained streaming granularity when translating from Gemini's large chunks.
+func approximateTokens(text string) []string {
+	var tokens []string
+	var buf strings.Builder
+	for _, r := range text {
+		buf.WriteRune(r)
+		if r == ' ' || r == '\n' || r == '\t' {
+			tokens = append(tokens, buf.String())
+			buf.Reset()
+		}
+	}
+	if buf.Len() > 0 {
+		tokens = append(tokens, buf.String())
+	}
+	return tokens
+}
+
 // ConvertOpenAIToGemini translates standard OpenAI messages to Gemini contents.
 func ConvertOpenAIToGemini(req *models.ChatCompletionRequest) (*GeminiRequest, error) {
 	var contents []GeminiContent
@@ -145,36 +163,40 @@ func ForwardGeminiStream(
 				if jsonErr := json.Unmarshal(payload, &gResp); jsonErr == nil && len(gResp.Candidates) > 0 {
 					parts := gResp.Candidates[0].Content.Parts
 					if len(parts) > 0 && parts[0].Text != "" {
-						if dropAfter > 0 && tokenCount >= dropAfter && onDrop != nil {
-							onDrop(w)
-							return nil
-						}
-						if dropChunkProb > 0 && rand.Float64() < dropChunkProb {
-							continue
-						}
-						if tokenDripMs > 0 {
-							time.Sleep(time.Duration(tokenDripMs) * time.Millisecond)
-						}
-						
-						tokenCount++
-						
-						chunk := models.ChatCompletionChunk{
-							ID:      cmplID,
-							Object:  "chat.completion.chunk",
-							Created: time.Now().Unix(),
-							Model:   model,
-							Choices: []models.ChunkChoice{
-								{
-									Index: 0,
-									Delta: models.ChunkDelta{
-										Content: parts[0].Text,
+						tokens := approximateTokens(parts[0].Text)
+						for _, tokenStr := range tokens {
+							if dropAfter > 0 && tokenCount >= dropAfter && onDrop != nil {
+								onDrop(w)
+								return nil
+							}
+							if dropChunkProb > 0 && rand.Float64() < dropChunkProb {
+								tokenCount++
+								continue
+							}
+							if tokenDripMs > 0 {
+								time.Sleep(time.Duration(tokenDripMs) * time.Millisecond)
+							}
+							
+							tokenCount++
+							
+							chunk := models.ChatCompletionChunk{
+								ID:      cmplID,
+								Object:  "chat.completion.chunk",
+								Created: time.Now().Unix(),
+								Model:   model,
+								Choices: []models.ChunkChoice{
+									{
+										Index: 0,
+										Delta: models.ChunkDelta{
+											Content: tokenStr,
+										},
 									},
 								},
-							},
+							}
+							chunkJSON, _ := json.Marshal(chunk)
+							_, _ = fmt.Fprintf(w, "data: %s\n\n", chunkJSON)
+							_ = rc.Flush()
 						}
-						chunkJSON, _ := json.Marshal(chunk)
-						_, _ = fmt.Fprintf(w, "data: %s\n\n", chunkJSON)
-						_ = rc.Flush()
 					}
 				}
 			}

@@ -61,7 +61,7 @@ func TestForwardGeminiStream(t *testing.T) {
 	if !strings.Contains(body, "chat.completion.chunk") {
 		t.Errorf("expected OpenAI format chunk, got: %s", body)
 	}
-	if !strings.Contains(body, "Hello from Gemini!") {
+	if !strings.Contains(body, "Hello ") {
 		t.Errorf("expected translated delta content, got: %s", body)
 	}
 	if !strings.Contains(body, "data: [DONE]\n\n") {
