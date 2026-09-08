@@ -340,6 +340,7 @@
                 const decoder = new TextDecoder();
                 let done = false;
                 let buffer = "";
+                let receivedDone = false;
 
                 while (!done) {
                     const { value, done: readerDone } = await reader.read();
@@ -353,7 +354,10 @@
                             line = line.trim();
                             if (line.startsWith('data: ')) {
                                 const payload = line.replace('data: ', '');
-                                if (payload === '[DONE]') break;
+                                if (payload === '[DONE]') {
+                                    receivedDone = true;
+                                    break;
+                                }
 
                                 try {
                                     const parsed = JSON.parse(payload);
@@ -372,6 +376,10 @@
                             }
                         }
                     }
+                }
+
+                if (!receivedDone) {
+                    botMsgDiv.innerHTML += `<br><br><span style="color:var(--accent-red)">Network Error (Simulated Drop?): Connection closed prematurely without [DONE]</span>`;
                 }
 
                 botMsgDiv.removeAttribute("id");
