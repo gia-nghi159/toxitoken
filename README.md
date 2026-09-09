@@ -9,7 +9,7 @@ Toxitoken is an edge-deployed API gateway for managing, securing, and testing LL
 * **Chaos Engineering**: Inject upstream failures (Prompt Fuzzing, Latency, Packet Loss, HTTP errors) via HTTP headers to test system resilience.
 * **BYOK (Bring Your Own Key)**: Supports dynamic credential injection, allowing multi-tenant platforms to route traffic securely.
 * **Zero-Buffer SSE Streaming**: Uses `http.ResponseController` to pipe chunked data to clients without memory buffering.
-* **Semantic Caching**: Automatically hashes prompts to return instant cache hits on duplicate queries, reducing API costs to zero.
+* **Caching**: Automatically hashes prompts to return instant cache hits on duplicate queries, reducing API costs to zero.
 * **Rate Limiting**: Distributed rate limiting using Redis to prevent API abuse.
 
 ---
@@ -24,7 +24,7 @@ You can toggle how Toxitoken routes traffic on the fly using the `X-Proxy-Mode` 
 - **Mock Mode**: Bypasses the upstream provider entirely and returns a perfectly formatted, deterministic response directly from the edge. This guarantees a **$0.00 API spend** for massive CI/CD testing.
   - *Example*: Simply add `"X-Proxy-Mode": "mock"` to your HTTP headers.
 
-### B. Semantic Caching (Cost Saving)
+### B. Caching (Cost Saving)
 Toxitoken automatically caches every successful API response using an optimized SHA-256 fingerprint (which isolates tenants by hashing the API key).
 - **How it works**: If a duplicate request is sent within 24 hours, Toxitoken intercepts it and replays the cached response instantly.
 - **Cost**: $0.00. Cache hits do not forward to OpenAI, completely saving your API tokens!
@@ -117,7 +117,7 @@ sequenceDiagram
     box Toxitoken Gateway (Edge)
         participant A as Auth & Rate Limit
         participant Ch as Chaos Engine
-        participant Ca as Semantic Cache
+        participant Ca as Cache
     end
     participant U as Upstream (OpenAI / Gemini)
 
